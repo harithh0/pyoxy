@@ -1,4 +1,10 @@
+import logging
 import socket
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 HOST = "localhost"
 # PORT = 8810
@@ -39,8 +45,16 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             )
             # print(proxy_http_request)
             target_socket.sendall(proxy_http_request.encode())
-            target_socket_response = target_socket.recv(6096)
+            target_socket_response = b""
+            while True:
+                chunk = target_socket.recv(4096)
+                if not chunk:  # if empty (it will return False so, not false -> true and it will break)
+                    break
+                else:
+                    target_socket_response += chunk
+
             print(target_socket_response.decode())
+            # send recieved response back to client
             conn.sendall(target_socket_response)
 
             # print(host, method, url, protocol)
