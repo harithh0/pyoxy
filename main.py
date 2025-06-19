@@ -54,6 +54,9 @@ class ProxyServer:
                 - We can actually see the raw response if we do curl --trace (look at the .. in the response header and the hex that corresponds to it 0d and 0a)
                     these both translate to \r\n ~intresting
             """
+
+        # application layer data here, since the data passed gives those bytes structure, rules, and purpose
+        # "A protocol becomes Layer 7 (TCP/IP Layer 5) when your app understands it as structured communication between two endpoints"
         proxy_http_request = f"{method} {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"  # first line must change from proxy request to http server request
 
         # for all other headers, etc.. copy them from curl request
@@ -70,6 +73,7 @@ class ProxyServer:
 
         # send recieved response back to client
 
+        # pretty sure when using curl it will automatically end the connectionn after recieving what it needs
         # logging.debug(host, method, url, protocol)
         self.server_socket.shutdown(socket.SHUT_WR)  # sends FIN
 
