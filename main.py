@@ -3,7 +3,7 @@ import socket
 
 logging.basicConfig(
     level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(levelname)s:\n%(message)s",
 )
 
 HOST = "localhost"
@@ -45,17 +45,18 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             )
             # print(proxy_http_request)
             target_socket.sendall(proxy_http_request.encode())
-            target_socket_response = b""
+
+            # updates by stream
             while True:
                 chunk = target_socket.recv(4096)
                 if not chunk:  # if empty (it will return False so, not false -> true and it will break)
                     break
                 else:
-                    target_socket_response += chunk
+                    conn.sendall(chunk)
+                    print(chunk)
 
-            print(target_socket_response.decode())
             # send recieved response back to client
-            conn.sendall(target_socket_response)
 
             # print(host, method, url, protocol)
+            s.shutdown(socket.SHUT_WR)  # sends FIN
         # print("user disconnected")
