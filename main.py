@@ -33,6 +33,7 @@ class ProxyServer:
             target_socket = socket.create_connection((host, 443))
             client_connection.sendall(
                 b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            # now the client is ready to send data to target
         except Exception as e:
             client_connection.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
             client_connection.close()
@@ -43,23 +44,22 @@ class ProxyServer:
         # NOTE: https proxy http request will send CONNECT request, we must respond with 'Connection Established' message | CONNECT tells the proxy: “Open a tunnel”
 
     def tunnel(self, source, dest):
-        print(source.recv(4096).decode())
-        # def forward(src, dst):
-        #     try:
-        #         while True:
-        #             data = src.recv(4096)
-        #
-        #             if not data:
-        #                 break
-        #             dst.sendall(data)
-        #     except Exception:
-        #         pass
-        #     finally:
-        #         src.close()
-        #         dst.close()
-        #
-        # threading.Thread(target=forward, args=(source, dest)).start()
-        # threading.Thread(target=forward, args=(dest, source)).start()
+        # starts sending and recieving encrypted data between client and target
+        def forward(src, dst):
+            try:
+                while True:
+                    data = src.recv(4096)
+                    if not data:
+                        break
+                    dst.sendall(data)
+            except Exception:
+                pass
+            finally:
+                src.close()
+                dst.close()
+
+        threading.Thread(target=forward, args=(source, dest)).start()
+        threading.Thread(target=forward, args=(dest, source)).start()
 
     def handle_http(self, data, client_connection):
         other_headers = data.split(b"\r\n")[2:]  # only gets the other headers
