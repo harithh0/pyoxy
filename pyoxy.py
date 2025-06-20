@@ -103,6 +103,7 @@ class ProxyServer:
         # no need to edit headers, strip out Proxy-Connectionn etc..
         self.tunnel(client_connection, target_socket)
 
+    # bidirectional data forwarding
     def tunnel(self, source, dest):
         # starts sending and recieving encrypted data between client and target
         def forward(src, dst):
@@ -113,12 +114,37 @@ class ProxyServer:
                         break
                     dst.sendall(data)
             except Exception:
+                # should log errors
                 pass
             finally:
-                src.close()
-                dst.close()
+                """
+                if using this:
+                # src.close()
+                # dst.close()
+                Then if we close the socket in one direction (Thread-A), the other direction (Thread-B) may still be actively transferring data — so closing the socket
+                there breaks the tunnel prematurely. So instead we just 
+                """
+                # Avoid prematurely closing the entire tunnel
+                try:
+                    src.shutdown(
+                        socket.SHUT_RD
+                    )  # SHUT_RD tells the OS we're done reading (no more recv())
+                except Exception:
+                    pass
+                try:
+                    dst.shutdown(
+                        socket.SHUT_WR
+                    )  # SHUT_WR tells the OS we're done writing (sends FIN to the remote peer)
+                except Exception:
+                    pass
 
+        """
+        - recieves data from src and sends to dest unitl everything is recieved, then it will recv from dest and send it to src until everything is recieved
+        - This creates a full-duplex TCP channel, as 
+        """
+        # client → proxy → server
         threading.Thread(target=forward, args=(source, dest)).start()
+        # server → proxy → client
         threading.Thread(target=forward, args=(dest, source)).start()
 
     def send_error_response(self,
