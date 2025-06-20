@@ -35,8 +35,11 @@ class ProxyServer:
         logging.debug(other_headers)
 
         # "".join insures that previous CRLF's are removed and that we are adding them to the end of each header including the last header per HTTP protocl
-        other_headers_formated = "".join(
-            [header_line.decode() + "\r\n" for header_line in other_headers])
+        # also removing Proxy-Connection header (we will set that as Connection: close header to make it more simple for now)
+        other_headers_formated = "".join([
+            header_line.decode() + "\r\n" for header_line in other_headers
+            if "Proxy-Connection:" not in header_line.decode()
+        ])
         logging.debug(other_headers_formated)
         # sleep(1000)
         method = data.decode().split()[0]
@@ -77,12 +80,12 @@ class ProxyServer:
             if not chunk:  # if empty (it will return False so, not false -> true and it will break)
                 break
             else:
+                # send recieved chunk back to client
                 client_connection.sendall(chunk)
 
-        # send recieved response back to client
+        # logging.debug(host, method, url, protocol)
 
         # pretty sure when using curl it will automatically end the connectionn after recieving what it needs
-        # logging.debug(host, method, url, protocol)
         self.server_socket.shutdown(socket.SHUT_WR)  # sends FIN
 
 
