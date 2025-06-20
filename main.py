@@ -24,13 +24,43 @@ class ProxyServer:
             print(f"connected from {add}")
             threading.Thread(target=self.handle_client, args=(conn, )).start()
 
-    def handle_client(self, client_connection):
-        data = client_connection.recv(1024)
-        if not data:  # if len of data sent is 0 -> means use disconnected
-            return
-        print("user sent: {}".format(data.decode()))
-        # TODO: first check if its valid HTTP request
+    def handle_https(self, data, client_connection):
+        print("https request")
+        decoded_split_data = data.decode().split()
+        host = decoded_split_data[4].split(":")[0]
 
+        try:
+            target_socket = socket.create_connection((host, 443))
+            client_connection.sendall(
+                b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        except Exception as e:
+            client_connection.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+            client_connection.close()
+            return
+
+        self.tunnel(client_connection, target_socket)
+
+        # NOTE: https proxy http request will send CONNECT request, we must respond with 'Connection Established' message | CONNECT tells the proxy: “Open a tunnel”
+
+    def tunnel(self, source, dest):
+
+        def forward(src, dst):
+            try:
+                while True:
+                    data = src.recv(4096)
+                    if not data:
+                        break
+                    dst.sendall(data)
+            except Exception:
+                pass
+            finally:
+                src.close()
+                dst.close()
+
+        threading.Thread(target=forward, args=(source, dest)).start()
+        threading.Thread(target=forward, args=(dest, source)).start()
+
+    def handle_http(self, data, client_connection):
         other_headers = data.split(b"\r\n")[2:]  # only gets the other headers
         logging.debug(other_headers)
 
@@ -41,10 +71,12 @@ class ProxyServer:
             if "Proxy-Connection:" not in header_line.decode()
         ])
         logging.debug(other_headers_formated)
-        # sleep(1000)
         method = data.decode().split()[0]
+        print(data.decode().split())
         url = data.decode().split()[1]
+        print("url", url)
         protocol = url.split(":")[0]
+        print("protocol", protocol)
         host = data.decode().split()[4]
         path = url.split(
             f"{host}"
@@ -85,8 +117,30 @@ class ProxyServer:
 
         # logging.debug(host, method, url, protocol)
 
-        # pretty sure when using curl it will automatically end the connectionn after recieving what it needs
-        self.server_socket.shutdown(socket.SHUT_WR)  # sends FIN
+        # pretty sure when using curl it will automatically end the connection after recieving what it needs
+        # closes connection (FIN, ACK, etc) -- since using Connection: close header we will be closing the connection without waiting for more reponses from client
+        client_connection.close()
+        return
+
+    def handle_client(self, client_connection):
+        data = client_connection.recv(1024)
+        if not data:  # if len of data sent is 0 -> means use disconnected
+            return
+        print("user sent: {}".format(data.decode()))
+        # TODO: first check if its valid HTTP request
+
+        # sleep(1000)
+        decoded_split_data = data.decode().split()
+        if decoded_split_data[0] == "CONNECT" and decoded_split_data[1][
+                -3:] == "443":
+            # https
+            # response = b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"
+            # client_connection.sendall(response)
+
+            # client_connection.close()
+            self.handle_https(data, client_connection)
+        else:
+            self.handle_http(data, client_connection)
 
 
 if __name__ == "__main__":
