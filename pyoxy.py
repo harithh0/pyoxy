@@ -1,5 +1,8 @@
+import ipaddress
 import logging
+import re
 import socket
+import subprocess
 import threading
 from time import sleep
 
@@ -20,22 +23,39 @@ file_logger.addHandler(file_handler)
 
 file_logger.propagate = False
 
-# Usage:
-
 
 class ProxyServer:
 
-    def __init__(self, host="0.0.0.0", port=2222):
+    def __init__(self, host="127.0.0.1", port=2222):
         self.host = host
         self.port = port
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.ipv = (socket.AF_INET
+                    if isinstance(ipaddress.ip_address(host),
+                                  ipaddress.IPv4Address) else socket.AF_INET6)
+        self.server_socket = socket.socket(self.ipv, socket.SOCK_STREAM)
         self.server_socket.bind((host, port))
         self.server_socket.listen()
 
     def start(self):
         while True:
-            conn, add = self.server_socket.accept()
-            threading.Thread(target=self.handle_client, args=(conn, )).start()
+            conn, addr = self.server_socket.accept()
+            self.ip_format = self.get_ip_format(addr[0])
+            if self.ip_format is not None:
+                threading.Thread(target=self.handle_client,
+                                 args=(conn, )).start()
+            else:
+                self.send_error_response(conn, 500,
+                                         "Error resolving IP address format")
+                conn.close()
+
+    def get_ip_format(self, ip_address):
+        ip_obj = ipaddress.ip_address(ip_address)
+        if isinstance(ip_obj, ipaddress.IPv4Address):
+            return socket.AF_INET
+        elif isinstance(ip_obj, ipaddress.IPv6Address):
+            return socket.AF_INET6
+        else:
+            return None
 
     def handle_https(self, data, client_connection):
         print("https request")
@@ -46,14 +66,39 @@ class ProxyServer:
 
         # NOTE: https proxy http request will send CONNECT request, we must respond with 'Connection Established' message | CONNECT tells the proxy: “Open a tunnel”
         try:
-            target_socket = socket.create_connection((host, 443))
+            target_socket = socket.socket(self.ip_format, socket.SOCK_STREAM)
+            target_socket.connect((host, 443))
+            # target_socket = socket.create_connection((host, 443))
             client_connection.sendall(
                 b"HTTP/1.1 200 Connection Established\r\n\r\n")
             # At this point, the client starts a TLS handshake over the now-open tunnel.
             # now the client is ready to send data to target
             # the proxy will just relay the encrypted bytes between the two connections
         except Exception as e:
-            client_connection.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+            # checks if the exception is of type socket.gaierror instead of comparing instance to class with ==
+            if isinstance(e, socket.gaierror):
+                result = subprocess.run(
+                    ["ping", "-c", "1", "1.1.1.1"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                # means we have internet access but not resolving target
+                if result.returncode == 0:
+                    self.send_error_response(
+                        client_connection,
+                        500,
+                        "Proxy can't connect to server: Likely target server does not support IPV6",
+                    )
+
+                # no internet access (by not being able to ping 1.1.1.1)
+                else:
+                    self.send_error_response(
+                        client_connection,
+                        500,
+                        "Proxy server internet connection to target failed",
+                    )
+            else:
+                self.send_error_response(client_connection, 502, "Bad Gateway")
             client_connection.close()
             return
 
@@ -116,7 +161,7 @@ class ProxyServer:
         path = url.split(
             f"{host}"
         )[1]  # WARNING: change this, what if user has the host name inside path
-        target_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        target_socket = socket.socket(self.ip_format, socket.SOCK_STREAM)
         file_logger.info(f"HTTP {client_connection.getpeername()} -> {host}")
         try:
             target_socket.connect((host, 80))
