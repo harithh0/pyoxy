@@ -43,22 +43,23 @@ class ProxyServer:
         # NOTE: https proxy http request will send CONNECT request, we must respond with 'Connection Established' message | CONNECT tells the proxy: “Open a tunnel”
 
     def tunnel(self, source, dest):
-
-        def forward(src, dst):
-            try:
-                while True:
-                    data = src.recv(4096)
-                    if not data:
-                        break
-                    dst.sendall(data)
-            except Exception:
-                pass
-            finally:
-                src.close()
-                dst.close()
-
-        threading.Thread(target=forward, args=(source, dest)).start()
-        threading.Thread(target=forward, args=(dest, source)).start()
+        print(source.recv(4096).decode())
+        # def forward(src, dst):
+        #     try:
+        #         while True:
+        #             data = src.recv(4096)
+        #
+        #             if not data:
+        #                 break
+        #             dst.sendall(data)
+        #     except Exception:
+        #         pass
+        #     finally:
+        #         src.close()
+        #         dst.close()
+        #
+        # threading.Thread(target=forward, args=(source, dest)).start()
+        # threading.Thread(target=forward, args=(dest, source)).start()
 
     def handle_http(self, data, client_connection):
         other_headers = data.split(b"\r\n")[2:]  # only gets the other headers
