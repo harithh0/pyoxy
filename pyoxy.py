@@ -1,6 +1,5 @@
 import ipaddress
 import logging
-import re
 import socket
 import subprocess
 import threading
@@ -20,7 +19,6 @@ file_handler.setLevel(logging.INFO)
 file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 file_handler.setFormatter(file_formatter)
 file_logger.addHandler(file_handler)
-
 file_logger.propagate = False
 
 
@@ -212,7 +210,6 @@ class ProxyServer:
             return
         # TODO: first check if its valid HTTP request
 
-        # sleep(1000)
         decoded_split_data = data.decode().split()
         if decoded_split_data[0] == "CONNECT" and decoded_split_data[1][
                 -3:] == "443":
