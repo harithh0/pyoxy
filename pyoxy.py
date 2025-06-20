@@ -3,6 +3,7 @@ import logging
 import socket
 import subprocess
 import threading
+import urllib.parse
 from time import sleep
 
 # Logger for console only
@@ -114,7 +115,7 @@ class ProxyServer:
                         break
                     dst.sendall(data)
             except Exception:
-                # should log errors
+                # TODO: should log errors
                 pass
             finally:
                 """
@@ -180,11 +181,9 @@ class ProxyServer:
 
         method = data.decode().split()[0]
         url = data.decode().split()[1]
-        protocol = url.split(":")[0]
-        host = data.decode().split()[4]
-        path = url.split(
-            f"{host}"
-        )[1]  # WARNING: change this, what if user has the host name inside path
+        url_data = urllib.parse.urlparse(url)
+        host = url_data.netloc
+        path = url_data.path
         target_socket = socket.socket(self.ip_format, socket.SOCK_STREAM)
         file_logger.info(f"HTTP {client_connection.getpeername()} -> {host}")
         try:
@@ -231,7 +230,8 @@ class ProxyServer:
         return
 
     def handle_client(self, client_connection):
-        data = client_connection.recv(1024)
+        # TODO: Add chunking here to avoid missing extra data
+        data = client_connection.recv(4096)
         if not data:  # if len of data sent is 0 -> means use disconnected
             return
         # TODO: first check if its valid HTTP request
