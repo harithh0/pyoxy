@@ -1,24 +1,21 @@
 import logging
 import socket
 import threading
+from time import sleep
 
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s:\n%(message)s",
 )
 
-HOST = "localhost"
-# PORT = 8810
-PORT = 8889
-
 
 class ProxyServer:
 
-    def __init__(self, host="localhost", port=8888):
+    def __init__(self, host="0.0.0.0", port=2222):
         self.host = host
         self.port = port
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind((HOST, PORT))
+        self.server_socket.bind((host, port))
         self.server_socket.listen()
 
     def start(self):
@@ -32,7 +29,16 @@ class ProxyServer:
         if not data:  # if len of data sent is 0 -> means use disconnected
             return
         print("user sent: {}".format(data.decode()))
+        # TODO: first check if its valid HTTP request
 
+        other_headers = data.split(b"\r\n")[2:]  # only gets the other headers
+        logging.debug(other_headers)
+
+        # "".join insures that previous CRLF's are removed and that we are adding them to the end of each header including the last header per HTTP protocl
+        other_headers_formated = "".join(
+            [header_line.decode() + "\r\n" for header_line in other_headers])
+        logging.debug(other_headers_formated)
+        # sleep(1000)
         method = data.decode().split()[0]
         url = data.decode().split()[1]
         protocol = url.split(":")[0]
@@ -57,8 +63,11 @@ class ProxyServer:
 
         # application layer data here, since the data passed gives those bytes structure, rules, and purpose
         # "A protocol becomes Layer 7 (TCP/IP Layer 5) when your app understands it as structured communication between two endpoints"
-        proxy_http_request = f"{method} {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"  # first line must change from proxy request to http server request
 
+        # first line must change from proxy request to http server request and then we add the other headers that where sent from proxy
+        proxy_http_request = f"{method} {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n{other_headers_formated}"
+        print("here")
+        print(proxy_http_request)
         # for all other headers, etc.. copy them from curl request
         target_socket.sendall(proxy_http_request.encode())
 
@@ -69,7 +78,6 @@ class ProxyServer:
                 break
             else:
                 client_connection.sendall(chunk)
-                print(chunk.decode())
 
         # send recieved response back to client
 
